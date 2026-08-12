@@ -1,12 +1,17 @@
 # ad-antifraud-next
 
+[![npm version](https://img.shields.io/npm/v/ad-antifraud-next.svg)](https://www.npmjs.com/package/ad-antifraud-next)
+[![npm downloads](https://img.shields.io/npm/dm/ad-antifraud-next.svg)](https://www.npmjs.com/package/ad-antifraud-next)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Dveyn/ad-antifraud-next.svg)](https://github.com/Dveyn/ad-antifraud-next)
+
 Anti-fraud toolkit for **paid ad traffic** in Next.js App Router.
 
 Blocks bot clicks, logs IP addresses and traffic sources (Yandex Direct, Google Ads, VK, UTM), protects analytics counters and forms from fake conversions.
 
 **Languages:** [English](README.md) | [Русский](README.ru.md)
 
-Works with **npm**, **yarn**, and **pnpm**.
+Works with **npm**, **yarn**, and **pnpm** (all use the npm registry).
 
 ## Features
 
@@ -25,13 +30,7 @@ yarn add ad-antifraud-next
 pnpm add ad-antifraud-next
 ```
 
-From GitHub (before npm publish):
-
-```bash
-npm install github:Dveyn/ad-antifraud-next
-yarn add Dveyn/ad-antifraud-next
-pnpm add github:Dveyn/ad-antifraud-next
-```
+Package page: https://www.npmjs.com/package/ad-antifraud-next
 
 Peer dependencies: `next >= 14`, `react >= 18` (react is optional if you skip the beacon).
 
