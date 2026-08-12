@@ -1,0 +1,51 @@
+{
+  "name": "ad-antifraud-next",
+  "version": "1.0.0",
+  "description": "Anti-fraud for paid ad traffic in Next.js: bot blocking, IP/source logging, Yandex Direct and Google Ads click protection",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dveyn/ad-antifraud-next.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Dveyn/ad-antifraud-next/issues"
+  },
+  "homepage": "https://github.com/Dveyn/ad-antifraud-next#readme",
+  "keywords": [
+    "antifraud",
+    "click-fraud",
+    "nextjs",
+    "yandex-direct",
+    "google-ads",
+    "bot-detection",
+    "ad-traffic"
+  ],
+  "files": [
+    "src",
+    "README.md",
+    "README.ru.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./src/index.js",
+    "./node": "./src/node.js",
+    "./core": "./src/core/index.js",
+    "./next/middleware": "./src/next/middleware.js",
+    "./next/handlers/log": "./src/next/handlers/log.js",
+    "./next/handlers/report": "./src/next/handlers/report.js",
+    "./react": "./src/react/AntifraudBeacon.jsx"
+  },
+  "peerDependencies": {
+    "next": ">=14.0.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
