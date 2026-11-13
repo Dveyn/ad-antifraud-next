@@ -2,6 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { formatSourceLabel } from './adSource.js';
 
+const STORE_KEY_LIMIT = 20000;
+const VISIT_DEDUPE_MS = 3000;
+
 /**
  * @param {import('./types.js').AntifraudConfig} config
  */
@@ -57,25 +60,87 @@ export function createStore(config) {
     return row;
   }
 
-  function cleanupVisits(entries, windowMs) {
-    const cutoff = Date.now() - windowMs;
-    return entries.filter((ts) => ts > cutoff);
+  function remember(key, value) {
+    visitStore.delete(key);
+    visitStore.set(key, value);
+    if (visitStore.size <= STORE_KEY_LIMIT) return;
+    for (const existing of visitStore.keys()) {
+      if (!String(existing).startsWith('block:')) {
+        visitStore.delete(existing);
+        break;
+      }
+    }
+  }
+
+  function countWindow(entries, now) {
+    const longCut = now - config.visitLimits.long.windowMs;
+    const shortCut = now - config.visitLimits.short.windowMs;
+    const fresh = entries.filter((ts) => ts > longCut);
+    return {
+      fresh,
+      short: fresh.filter((ts) => ts > shortCut).length,
+      long: fresh.length,
+    };
   }
 
   function trackVisit(ip, pathname) {
-    const key = `${ip}:${pathname}`;
     const now = Date.now();
-    let entries = visitStore.get(key) || [];
-    entries.push(now);
+    const safeIp = String(ip || 'unknown').slice(0, 64);
+    const safePath = String(pathname || '/').slice(0, 200);
+    const dedupeKey = `dedupe:${safeIp}:${safePath}`;
+    const pathKey = `v:${safeIp}:${safePath}`;
+    const ipKey = `v:${safeIp}`;
+    const last = visitStore.get(dedupeKey) || 0;
 
-    const short = cleanupVisits(entries, config.visitLimits.short.windowMs);
-    const long = cleanupVisits(entries, config.visitLimits.long.windowMs);
-    visitStore.set(key, long);
+    if (now - last < VISIT_DEDUPE_MS) {
+      const pathCount = countWindow(visitStore.get(pathKey) || [], now);
+      const ipCount = countWindow(visitStore.get(ipKey) || [], now);
+      return {
+        short: pathCount.short,
+        long: pathCount.long,
+        ipShort: ipCount.short,
+        ipLong: ipCount.long,
+      };
+    }
+
+    remember(dedupeKey, now);
+    const pathCount = countWindow([...(visitStore.get(pathKey) || []), now], now);
+    const ipCount = countWindow([...(visitStore.get(ipKey) || []), now], now);
+    remember(pathKey, pathCount.fresh);
+    remember(ipKey, ipCount.fresh);
 
     return {
-      short: short.length,
-      long: long.length,
+      short: pathCount.short,
+      long: pathCount.long,
+      ipShort: ipCount.short,
+      ipLong: ipCount.long,
     };
+  }
+
+  function rememberClickIds(ip, ids) {
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    const hour = 60 * 60 * 1000;
+    const list = (Array.isArray(ids) ? ids : []).filter((id) => (
+      typeof id === 'string' && id.length >= 6 && id.length <= 128 && !/[\s<>"']/.test(id)
+    ));
+    let replay = 0;
+
+    for (const id of list) {
+      const key = `cid:${id}`;
+      const rows = (visitStore.get(key) || []).filter((row) => now - row.ts < day);
+      if (rows.some((row) => row.ip !== ip)) replay += 1;
+      rows.push({ ip, ts: now });
+      remember(key, rows.slice(-30));
+    }
+
+    const known = (visitStore.get(`ipcid:${ip}`) || []).filter((row) => now - row.ts < hour);
+    for (const id of list) {
+      if (!known.some((row) => row.id === id)) known.push({ id, ts: now });
+    }
+    remember(`ipcid:${ip}`, known.slice(-50));
+
+    return { replay, churn: known.length };
   }
 
   function isIpBlocked(ip) {
@@ -203,7 +268,10 @@ export function createStore(config) {
       signals: ev.signals?.map((s) => s.code) || [],
       userAgent: ev.userAgent?.slice(0, 120),
       yclid: ev.yclid,
+      ysclid: ev.ysclid,
       gclid: ev.gclid,
+      wbraid: ev.wbraid,
+      gbraid: ev.gbraid,
       utm_source: ev.utm_source,
       utm_campaign: ev.utm_campaign,
       refererHost: ev.refererHost,
@@ -237,7 +305,11 @@ export function createStore(config) {
       channel: source.channel,
       sourceLabel: formatSourceLabel(source),
       yclid: source.yclid || null,
+      ysclid: source.ysclid || null,
       gclid: source.gclid || null,
+      wbraid: source.wbraid || null,
+      gbraid: source.gbraid || null,
+      ttclid: source.ttclid || null,
       utm_source: source.utm_source || null,
       utm_medium: source.utm_medium || null,
       utm_campaign: source.utm_campaign || null,
@@ -254,6 +326,7 @@ export function createStore(config) {
   return {
     appendEvent,
     trackVisit,
+    rememberClickIds,
     isIpBlocked,
     blockIp,
     readEvents,

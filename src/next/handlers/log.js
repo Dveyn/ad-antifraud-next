@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
+import { collectClickIds, extractAdSource } from '../../core/adSource.js';
 import { getClientIp } from '../../core/ip.js';
+import { applySignals } from '../../core/scoring.js';
+import { finalizeLoggedVisit } from '../../core/serverScore.js';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -25,19 +28,19 @@ export function createLogHandlers(config, store, score) {
         return NextResponse.json({ ok: true, skipped: true });
       }
 
-      const pathname = result.source?.path || '/';
+      const pathname = result?.source?.path || '/';
       const visits = store.trackVisit(ip, pathname);
-      const enriched = score({
+      const clicks = store.rememberClickIds(ip, collectClickIds(result?.source));
+      const finalResult = finalizeLoggedVisit(config, result, {
         url,
         referer,
         userAgent,
         ip,
-        headers: req.headers,
-        recentVisitsShort: visits.short,
-        recentVisitsLong: visits.long,
+        headerMap: body.headers,
+        visits,
+        clicks,
+        previouslyBlocked: store.isIpBlocked(ip),
       });
-
-      const finalResult = enriched.score > result.score ? enriched : result;
       const event = store.eventFromScoreResult({
         ip,
         userAgent,
@@ -78,8 +81,10 @@ export function createLogHandlers(config, store, score) {
         }
       })();
 
+      const preview = extractAdSource(url, referer);
       const visits = store.trackVisit(ip, pathname);
-      const result = score({
+      const clicks = store.rememberClickIds(ip, collectClickIds(preview));
+      let result = score({
         url,
         referer,
         userAgent: userAgent || req.headers.get('user-agent') || '',
@@ -88,7 +93,18 @@ export function createLogHandlers(config, store, score) {
         clientSignals,
         recentVisitsShort: visits.short,
         recentVisitsLong: visits.long,
+        recentIpShort: visits.ipShort,
+        recentIpLong: visits.ipLong,
+        clickIdReplay: clicks.replay,
+        clickIdChurn: clicks.churn,
       });
+      if (store.isIpBlocked(ip)) {
+        result = applySignals(config, result, [{
+          code: 'prior_block',
+          score: 100,
+          detail: 'ip block list',
+        }]);
+      }
 
       if (!result.inScope) {
         return NextResponse.json({ ok: true, action: 'allow', score: 0 });
