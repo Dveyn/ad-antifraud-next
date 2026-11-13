@@ -1,6 +1,6 @@
 {
   "name": "ad-antifraud-next",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Anti-fraud for paid ad traffic in Next.js: bot blocking, IP/source logging, Yandex Direct and Google Ads click protection",
   "type": "module",
   "license": "MIT",
