@@ -8,6 +8,7 @@
  * @property {string[]} adLandingPaths
  * @property {{ short: { max: number, windowMs: number }, long: { max: number, windowMs: number } }} visitLimits
  * @property {string} cookieName
+ * @property {string} visitCookieName
  * @property {number} cookieMaxAge
  * @property {string} logDir
  * @property {string} logFile

@@ -21,12 +21,18 @@ function collectClientSignals() {
     /HeadlessChrome/i.test(nav.userAgent) ||
     (nav.languages?.length === 0 && /Chrome/i.test(nav.userAgent));
 
+  const brands = nav.userAgentData?.brands?.map((item) => item.brand).filter(Boolean).join(',') || '';
+
   return {
     webdriver: nav.webdriver === true,
     headless,
     automation,
     zeroPlugins: nav.plugins?.length === 0,
     screen: `${window.screen?.width}x${window.screen?.height}`,
+    outerEmpty: window.outerWidth === 0 && window.outerHeight === 0,
+    platform: nav.platform || nav.userAgentData?.platform || '',
+    mobileHint: typeof nav.userAgentData?.mobile === 'boolean' ? nav.userAgentData.mobile : undefined,
+    brands,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
 }

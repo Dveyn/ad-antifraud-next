@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
 import { resolveConfig } from '../core/config.js';
+import { evaluateEdgeRequest } from '../core/edgeDecision.js';
 import { scoreVisit } from '../core/scoring.js';
 import { getClientIp } from '../core/ip.js';
-
-function shouldSkip(pathname, skipPrefixes) {
-  if (!pathname) return true;
-  return skipPrefixes.some((p) => pathname.startsWith(p));
-}
 
 function queueLog(request, config, payload) {
   if (!config.internalSecret) return;
@@ -27,60 +23,55 @@ function queueLog(request, config, payload) {
  */
 export function createMiddleware(config, score) {
   return function middleware(request) {
-    if (!config.enabled) {
-      return NextResponse.next();
-    }
-
     const { pathname, search } = request.nextUrl;
-    if (shouldSkip(pathname, config.skipPrefixes)) {
-      return NextResponse.next();
-    }
-
     const ip = getClientIp(request);
     const userAgent = request.headers.get('user-agent') || '';
     const referer = request.headers.get('referer');
-    const url = `${request.nextUrl.origin}${pathname}${search}`;
-
-    const result = score({
-      url,
+    const decision = evaluateEdgeRequest(config, {
+      pathname,
+      search,
+      origin: request.nextUrl.origin,
       referer,
       userAgent,
       ip,
       headers: request.headers,
-      recentVisitsShort: 0,
-      recentVisitsLong: 0,
-    });
+      cookies: {
+        [config.cookieName]: request.cookies?.get?.(config.cookieName)?.value,
+        [config.visitCookieName]: request.cookies?.get?.(config.visitCookieName)?.value,
+      },
+    }, score);
 
-    if (!result.inScope) {
-      return NextResponse.next();
-    }
+    if (decision.skip) return NextResponse.next();
 
     queueLog(request, config, {
       ip,
       userAgent,
-      url,
+      url: `${request.nextUrl.origin}${pathname}${search}`,
       referer,
-      result,
+      headers: decision.logHeaders,
+      result: decision.result,
       layer: 'middleware',
     });
 
-    const response =
-      result.action === 'block'
-        ? new NextResponse(config.blockPageHtml, {
-            status: 403,
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-          })
-        : NextResponse.next();
+    const response = decision.responseAction === 'block'
+      ? new NextResponse(config.blockPageHtml, {
+          status: 403,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        })
+      : NextResponse.next();
 
-    if (result.action === 'block' || result.action === 'soft_block') {
-      response.cookies.set(config.cookieName, result.action, {
-        maxAge: config.cookieMaxAge,
-        httpOnly: false,
+    for (const cookie of decision.cookiesToSet || []) {
+      response.cookies.set(cookie.name, cookie.value, {
+        maxAge: cookie.maxAge,
+        httpOnly: cookie.name === config.visitCookieName,
         sameSite: 'lax',
         path: '/',
       });
-      response.headers.set('x-ad-fraud', result.action);
-      response.headers.set('x-ad-fraud-score', String(result.score));
+    }
+
+    if (decision.result?.action === 'block' || decision.result?.action === 'soft_block') {
+      response.headers.set('x-ad-fraud', decision.result.action);
+      response.headers.set('x-ad-fraud-score', String(decision.result.score));
     }
 
     return response;

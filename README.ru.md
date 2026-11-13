@@ -15,9 +15,10 @@
 
 ## Возможности
 
-- Edge middleware - первая линия защиты, жёсткий блок (403)
-- Client beacon - детект headless-браузеров и автоматизации
-- JSONL-лог - IP, yclid, gclid, utm, referer, user-agent, score
+- Edge middleware - первая линия защиты, жёсткий блок (403) и залипающая cookie блока
+- Client beacon - headless, автоматизация, пустое окно, расхождение UA и платформы
+- Повтор click id - тот же yclid/gclid/wbraid с другого IP блокируется
+- JSONL-лог - IP, yclid, ysclid, gclid, wbraid, utm, referer, user-agent, score
 - Report API - топ фродовых IP и источников для обращений в поддержку рекламы
 - Мягкий блок - страница открывается, но счётчики не грузятся
 - Защита форм - отклонение заявок с фрод-IP
@@ -155,15 +156,27 @@ curl -H "Authorization: Bearer $ANTIFRAUD_ADMIN_TOKEN" \
 
 | Сигнал | Score | Описание |
 |--------|-------|----------|
-| `bot_ua` | 90 | Известный бот в User-Agent |
+| `bot_ua` | 90 | Известный бот в User-Agent. AdsBot-Google и проверка Директа не блокируются |
 | `webdriver` | 100 | `navigator.webdriver === true` |
 | `automation_globals` | 90 | Selenium, PhantomJS |
 | `headless_client` | 85 | Headless Chrome |
-| `datacenter_ip` | 50 | IP хостинга на рекламном клике |
-| `rate_short` | 45 | Много визитов за 5 минут |
-| `rate_long` | 65 | Много визитов за час |
-| `empty_ua` | 55 | Пустой User-Agent |
-| `missing_sec_fetch` | 30 | Нет Sec-Fetch заголовков |
+| `click_id_replay` | 80 | Тот же click id уже был с другого IP |
+| `malformed_click_id` | 80 | Click id мусорный, слишком короткий или не той формы |
+| `click_id_churn` | 75 | 8 и больше разных click id с одного IP за час |
+| `rate_short` | 75 | Визиты на один путь уперлись в короткий лимит (по умолчанию 4 / 5 мин) |
+| `rate_ip` | 70 | Тот же IP набрал двойной короткий лимит по всем путям |
+| `rate_long` | 65 | Визиты на один путь уперлись в длинный лимит (по умолчанию 15 / 1 ч) |
+| `empty_ua` | 80 / 55 | Нет UA или он короче 20 символов |
+| `zero_window` | 55 | Браузер сообщает внешнее окно 0x0 |
+| `datacenter_ip` | 50 | Известный префикс VPS/Tor на рекламном клике. Целые облачные /8 не используются |
+| `ua_hint_mismatch` | 45 | ОС в UA не совпадает с client hints |
+| `click_referer_mismatch` | 40 | Click id Яндекса открыт с Google, или наоборот |
+| `suspicious_viewport` | 40 | Экран 0x0 или 1x1 |
+| `mixed_click_ids` | 35 | Click id двух рекламных сетей в одном URL |
+| `missing_sec_fetch` | 30 | Современный браузер без Sec-Fetch |
+| `missing_client_hints` | 25 | Документ Chrome без `sec-ch-ua` |
+| `zero_plugins` | 25 | Десктопный Chrome без плагинов. Мобильные не учитываются |
+| `prior_block` | 100 | Cookie блока или серверный список IP |
 
 Действия:
 
@@ -184,6 +197,7 @@ createAntifraud({
   logApiPath: '/api/antifraud/log',
   reportApiPath: '/api/antifraud/report',
   fraudEventName: 'adFraudStatus',
+  visitCookieName: 'ad_fv',
   visitLimits: {
     short: { max: 4, windowMs: 300000 },
     long: { max: 15, windowMs: 3600000 },
@@ -221,6 +235,9 @@ const result = scoreVisit(config, {
 
 - Рекламные площадки списывают деньги **в момент клика**, до захода на сайт. Библиотека снижает фейковые конверсии, защищает аналитику и собирает доказательства (IP, yclid) для возврата бюджета.
 - Middleware и API routes используют **разные импорты** - middleware не должен тянуть Node store (fs).
+- Middleware отправляет в log API заголовки посетителя. Сам log-запрос не оценивается как визит.
+- Обновление страницы с тем же click id и тем же IP не считается повтором. Повтор - это тот же click id с другого IP.
+- Платные click id также включают `ysclid`, `wbraid`, `gbraid`, `ttclid` и `rb_clickid`.
 - Добавьте `transpilePackages: ['ad-antifraud-next']` в `next.config.js`, если JSX beacon не компилируется.
 
 ## Лицензия
