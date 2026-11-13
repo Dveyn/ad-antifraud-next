@@ -32,6 +32,7 @@ export function resolveConfig(overrides = {}) {
     adLandingPaths: overrides.adLandingPaths ?? [],
     visitLimits: overrides.visitLimits ?? DEFAULT_VISIT_LIMITS,
     cookieName: overrides.cookieName ?? 'ad_fraud',
+    visitCookieName: overrides.visitCookieName ?? 'ad_fv',
     cookieMaxAge: overrides.cookieMaxAge ?? 60 * 60 * 24,
     logDir: overrides.logDir ?? 'data/antifraud',
     logFile: overrides.logFile ?? 'events.jsonl',

@@ -15,9 +15,10 @@ Works with **npm**, **yarn**, and **pnpm** (all use the npm registry).
 
 ## Features
 
-- Edge middleware - first-line bot blocking (403)
-- Client beacon - headless browser and automation detection
-- JSONL event log - IP, yclid, gclid, utm, referer, user-agent, score
+- Edge middleware - first-line bot blocking (403) and a sticky block cookie
+- Client beacon - headless browser, automation, empty window, UA/platform mismatch
+- Click-id replay - the same yclid/gclid/wbraid from a second IP is blocked
+- JSONL event log - IP, yclid, ysclid, gclid, wbraid, utm, referer, user-agent, score
 - Report API - top fraud IPs and ad sources for refund requests
 - Soft block - page loads but trackers are disabled
 - Form protection - block submissions from fraud IPs
@@ -155,15 +156,27 @@ Log file on server: `data/antifraud/events.jsonl`
 
 | Signal | Score | Description |
 |--------|-------|-------------|
-| `bot_ua` | 90 | Known bot or scraper User-Agent |
+| `bot_ua` | 90 | Known bot or scraper User-Agent. AdsBot-Google and Yandex Direct checkers are allowed |
 | `webdriver` | 100 | `navigator.webdriver === true` |
 | `automation_globals` | 90 | Selenium, PhantomJS globals |
 | `headless_client` | 85 | Headless Chrome heuristics |
-| `datacenter_ip` | 50 | Hosting IP on ad click |
-| `rate_short` | 45 | Too many visits in 5 minutes |
-| `rate_long` | 65 | Too many visits in 1 hour |
-| `empty_ua` | 55 | Missing User-Agent |
+| `click_id_replay` | 80 | Same click id already seen from another IP |
+| `malformed_click_id` | 80 | Click id is junk, too short, or the wrong shape |
+| `click_id_churn` | 75 | 8 or more distinct click ids from one IP in an hour |
+| `rate_short` | 75 | Visits on one path hit the short limit (default 4 / 5 min) |
+| `rate_ip` | 70 | Same IP hits twice the short limit across paths |
+| `rate_long` | 65 | Visits on one path hit the long limit (default 15 / 1 h) |
+| `empty_ua` | 80 / 55 | Missing UA, or shorter than 20 characters |
+| `zero_window` | 55 | Browser reports a 0x0 outer window |
+| `datacenter_ip` | 50 | Known VPS/Tor prefix on an ad click. Whole cloud /8 ranges are not used |
+| `ua_hint_mismatch` | 45 | UA operating system disagrees with client hints |
+| `click_referer_mismatch` | 40 | Yandex click id from Google, or the reverse |
+| `suspicious_viewport` | 40 | Viewport is 0x0 or 1x1 |
+| `mixed_click_ids` | 35 | Click ids from two ad networks on one URL |
 | `missing_sec_fetch` | 30 | Modern browser without Sec-Fetch headers |
+| `missing_client_hints` | 25 | Chrome document navigation without `sec-ch-ua` |
+| `zero_plugins` | 25 | Desktop Chrome with no plugins. Mobile is ignored |
+| `prior_block` | 100 | Block cookie or server block list |
 
 Actions:
 
@@ -184,6 +197,7 @@ createAntifraud({
   logApiPath: '/api/antifraud/log',
   reportApiPath: '/api/antifraud/report',
   fraudEventName: 'adFraudStatus',
+  visitCookieName: 'ad_fv',
   visitLimits: {
     short: { max: 4, windowMs: 300000 },
     long: { max: 15, windowMs: 3600000 },
@@ -221,6 +235,9 @@ const result = scoreVisit(config, {
 
 - Ad platforms charge per click **before** the user lands on your site. This library reduces fake conversions, protects analytics, and collects evidence (IPs, yclid) for refund requests.
 - Middleware and API routes use **separate imports** - middleware must not import the Node store (filesystem).
+- The middleware sends the visitor's headers to the log API. The log request is not scored as if it were the visitor.
+- A refresh with the same click id on the same IP is not replay. Replay is the same click id from a different IP.
+- Paid click ids also include `ysclid`, `wbraid`, `gbraid`, `ttclid`, and `rb_clickid`.
 - Set `transpilePackages: ['ad-antifraud-next']` in `next.config.js` if the beacon JSX is not compiled.
 
 ## License

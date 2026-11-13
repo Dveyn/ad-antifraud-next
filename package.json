@@ -65,6 +65,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "prepublishOnly": "node --input-type=module -e \"import fs from 'fs'; fs.accessSync('src/index.js')\""
+    "test": "node --test",
+    "prepublishOnly": "npm test"
   }
 }
